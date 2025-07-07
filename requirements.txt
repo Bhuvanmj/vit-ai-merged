@@ -1,0 +1,10 @@
+streamlit
+torch
+torchvision
+transformers
+pillow
+pandas
+tqdm
+matplotlib
+plotly
+requests
