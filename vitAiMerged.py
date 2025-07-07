@@ -3,13 +3,10 @@ from PIL import Image
 import torch
 import requests
 import os
+import shutil
 import pandas as pd
-from torchvision.datasets import ImageFolder
 from torchvision import transforms
-from torch.utils.data import DataLoader
-from transformers import AutoImageProcessor, AutoModelForImageClassification, ViTFeatureExtractor
-from tqdm import tqdm
-import matplotlib.pyplot as plt
+from transformers import AutoImageProcessor, AutoModelForImageClassification
 import plotly.graph_objects as go
 
 # 🎨 Streamlit page settings
@@ -41,7 +38,6 @@ st.markdown("<hr>", unsafe_allow_html=True)
 def load_model():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Load pretrained base model
     model = AutoModelForImageClassification.from_pretrained(
         "google/vit-base-patch16-224",
         num_labels=4,
@@ -50,16 +46,28 @@ def load_model():
         ignore_mismatched_sizes=True
     ).to(device)
 
-    # Load weights from Hugging Face (auto-download)
-    MODEL_URL = "https://huggingface.co/Bhuvanmj/vit-model/resolve/main/vit_brain_tumor_5class.pth"
+    MODEL_URL = "https://huggingface.co/bhuvan77/vit-model/resolve/main/vit_brain_tumor_5class.pth"
     model_path = "vit_brain_tumor_5class.pth"
 
     if not os.path.exists(model_path):
-        with open(model_path, "wb") as f:
-            f.write(requests.get(MODEL_URL).content)
+        st.info("📥 Downloading model weights. Please wait...")
+        try:
+            with requests.get(MODEL_URL, stream=True, timeout=60) as r:
+                r.raise_for_status()
+                with open(model_path, "wb") as f:
+                    shutil.copyfileobj(r.raw, f)
+            st.success("✅ Model downloaded successfully.")
+        except Exception as e:
+            if os.path.exists(model_path):
+                os.remove(model_path)
+            raise RuntimeError(f"❌ Download failed: {e}")
 
-    model.load_state_dict(torch.load(model_path, map_location=device))
-    model.eval()
+    try:
+        model.load_state_dict(torch.load(model_path, map_location=device, weights_only=False))
+        model.eval()
+    except Exception as e:
+        os.remove(model_path)
+        raise RuntimeError(f"❌ Model loading failed. Corrupted file deleted. Error: {e}")
 
     processor = AutoImageProcessor.from_pretrained("google/vit-base-patch16-224", use_fast=True)
     return model, processor, device
